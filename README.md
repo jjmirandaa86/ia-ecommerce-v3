@@ -1,52 +1,52 @@
 # IA-ECOMMERCE v3
 
-Chat en inglés que responde con datos reales del ERP del cliente (**solo lectura**).  
-MVP: MySQL AdventureWorks-style `ecommerce`. Un deploy Next.js (UI + API).
+English natural-language chat that answers with **real data** from the client ERP (**read-only**).  
+MVP: AdventureWorks-style MySQL `ecommerce`. One Next.js deploy (UI + API).
 
-Documentación detallada: [docs/README.md](docs/README.md).
+Detailed docs: [docs/README.md](docs/README.md).
 
 ---
 
-## 1. ¿Qué es la app?
+## 1. What the app is
 
-| Pantalla | Qué hace |
+| Screen | What it does |
 |---|---|
-| **Login** | Empleado piloto (`founder` / `founder123`). JWT en cookie httpOnly. |
-| **Dashboard** | KPIs y gráficos de uso del agente (últimos 7 días) desde `ai_query_audit_log`. |
-| **SQL Agent** | Pregunta en lenguaje natural → intent fijo → SELECT seguro → respuesta en inglés. |
-| **Health** | UP/DOWN de app, MySQL producto, BD cliente y Ollama. |
+| **Login** | Pilot employee (`founder` / `founder123`). JWT in an httpOnly cookie. |
+| **Dashboard** | Agent usage KPIs and charts (last 7 days) from `ai_query_audit_log`. |
+| **SQL Agent** | Natural-language question → fixed intent → safe SELECT → English answer. |
+| **Health** | UP/DOWN for app, product MySQL, client DB, and Ollama. |
 
-**No hace:** create/update/delete en el ERP, Maintenance/CRUD, SQL libre generado por el LLM.
+**Out of scope:** create/update/delete on the ERP, Maintenance/CRUD, free-form SQL from the LLM.
 
 ---
 
-## 2. Arquitectura (qué uso y por qué)
+## 2. Architecture (what & why)
 
-**Estilo:** *Modular monolith* + *Hexagonal (ports & adapters)* dentro de Next.js ([ADR-001](docs/architecture/ADR/ADR-001-architecture.md)).
+**Style:** *Modular monolith* + *Hexagonal (ports & adapters)* inside Next.js ([ADR-001](docs/architecture/ADR/ADR-001-architecture.md)).
 
-- **Un monólito** → un solo deploy; suficiente para un operador/piloto.
-- **Capas hacia adentro** → el dominio no importa Prisma ni Ollama; se puede cambiar infra sin reescribir el chat.
-- **ACL por `system_type`** → el ERP del cliente no contamina nuestro dominio; solo SELECT allowlisted.
-- **LLM clasifica, no escribe SQL** → intents fijos + builders deterministas ([ADR-004](docs/architecture/ADR/ADR-004-query-engine.md)).
+- **One monolith** → one deploy; enough for a single operator/pilot.
+- **Dependencies point inward** → domain never imports Prisma or Ollama; infra can change without rewriting the chat.
+- **ACL per `system_type`** → client ERP does not pollute our domain; only allowlisted SELECTs.
+- **LLM classifies, does not write SQL** → fixed intents + deterministic builders ([ADR-004](docs/architecture/ADR/ADR-004-query-engine.md)).
 
 ```mermaid
 flowchart TB
-  subgraph Browser["Navegador"]
-    UI["UI Mantine<br/>Login · Dashboard · Agent · Health"]
+  subgraph Browser["Browser"]
+    UI["Mantine UI<br/>Login · Dashboard · Agent · Health"]
   end
 
-  subgraph Next["Next.js 15 — monólito"]
+  subgraph Next["Next.js 15 — monolith"]
     API["Route Handlers /api/*"]
     APP["Application<br/>askQuestion, login, stats, health"]
     DOM["Domain QueryAgent<br/>scope · intents · heuristics · semantics · sql templates"]
-    ACL["ClientAcl ecommerce<br/>allowlist + SELECT parametrizado"]
+    ACL["ClientAcl ecommerce<br/>allowlist + bound SELECT"]
     INF["Infrastructure<br/>Prisma · jose · Ollama client · crypto"]
   end
 
-  subgraph Data["Datos / infra externa"]
-    PDB[("MySQL producto<br/>ia_ecommerce_db<br/>users, chat, audit")]
-    CDB[("MySQL cliente<br/>ecommerce<br/>solo lectura")]
-    LLM["Ollama<br/>clasificar intent JSON"]
+  subgraph Data["Data / external infra"]
+    PDB[("Product MySQL<br/>ia_ecommerce_db<br/>users, chat, audit")]
+    CDB[("Client MySQL<br/>ecommerce<br/>read-only")]
+    LLM["Ollama<br/>classify intent JSON"]
   end
 
   UI -->|HTTPS| API
@@ -56,90 +56,90 @@ flowchart TB
   APP --> ACL
   INF --> PDB
   ACL --> CDB
-  INF -.->|solo si heuristic no alcanza| LLM
+  INF -.->|only if heuristic misses| LLM
 ```
 
-| Bloque del diagrama | Para qué sirve | Por qué lo uso |
+| Diagram block | What it does | Why we use it |
 |---|---|---|
-| **UI Mantine** | Pantallas y formularios. | UI rápida, consistente, sin reinventar componentes. |
-| **Route Handlers** | Entrada HTTP (`/api/auth`, `/api/agent/ask`, …). | API dentro del mismo Next; un solo deploy. |
-| **Application** | Casos de uso (orquestan el flujo). | Reglas de aplicación testeables, fuera de React. |
-| **Domain QueryAgent** | Catálogo de intents, scope, SQL templates. | El “qué se puede preguntar” vive en código versionado. |
-| **ClientAcl** | Traduce `QueryPlan` → SELECT bound + allowlist. | Aísla el esquema del cliente; evita inyección. |
-| **Infrastructure** | Prisma, JWT, fetch a Ollama. | Detalles técnicos al borde; sustituibles. |
-| **MySQL producto** | Login, conversación del día, auditoría, suggestions. | Nuestro modelo; no es el ERP. |
-| **MySQL cliente** | Productos, órdenes, reviews, customers. | Fuente de verdad comercial; **read-only**. |
-| **Ollama** | Si el heuristic no cierra, propone intent JSON. | Clasificación local; **nunca** genera SQL ejecutable. |
+| **Mantine UI** | Screens and forms. | Fast, consistent B2B UI without reinventing components. |
+| **Route Handlers** | HTTP entry (`/api/auth`, `/api/agent/ask`, …). | API lives in the same Next app → one deploy. |
+| **Application** | Use cases that orchestrate the flow. | Testable application rules outside React. |
+| **Domain QueryAgent** | Intent catalog, scope, SQL templates. | “What can be asked” is versioned code. |
+| **ClientAcl** | Turns `QueryPlan` → bound SELECT + allowlist. | Isolates client schema; blocks injection. |
+| **Infrastructure** | Prisma, JWT, Ollama fetch. | Tech details at the edge; swappable. |
+| **Product MySQL** | Login, day conversation, audit, suggestions. | Our model — not the ERP. |
+| **Client MySQL** | Products, orders, reviews, customers. | Commercial source of truth; **read-only**. |
+| **Ollama** | If heuristic fails, proposes intent JSON. | Local classification; **never** emits executable SQL. |
 
-### Patrones que verás en el código
+### Patterns in the codebase
 
-| Patrón | Dónde |
+| Pattern | Where |
 |---|---|
 | Use case / application service | `src/query-agent/application/ask-question.use-case.ts` |
-| Registry + strategy (módulos por tabla) | `src/query-agent/domain/tables/index.ts` |
+| Registry + strategy (per-table modules) | `src/query-agent/domain/tables/index.ts` |
 | Pipeline | scope → classify → build → execute → format → audit |
-| Semantic layer (contrato por intent) | `*/semantics.ts` + `domain/semantics/validate.ts` |
+| Semantic layer (per-intent contract) | `*/semantics.ts` + `domain/semantics/validate.ts` |
 | Anti-Corruption Layer | `src/client-acl/ecommerce/` |
 
 ---
 
-## 3. Tecnologías (qué / para qué / por qué)
+## 3. Technologies (what / for what / why)
 
-| Tecnología | Para qué | Por qué la uso |
+| Technology | What it does | Why we use it |
 |---|---|---|
-| **Next.js 15** (App Router) | UI + API en un repo. | Un deploy, SSR/rutas claras, TypeScript first-class. |
-| **React 19** | Componentes de pantalla. | Estándar del stack Next. |
-| **TypeScript** | Tipado de planes, DTOs, SQL builders. | Menos errores en intents y contratos API. |
-| **Mantine 7** | Layout, forms, tables, notifications. | Productividad UI admin/B2B. |
-| **Recharts** | Dashboard + charts reutilizables (`presentation/charts`). | Gráficos declarativos; listos para el agent después. |
-| **react-icons** | Iconografía del shell y tips. | Ligero y uniforme. |
-| **Prisma** | ORM sobre `ia_ecommerce_db`. | Schema versionado, seed, tipado. |
-| **MySQL** | Producto + cliente (dos bases). | ERP típico; producto aislado del cliente. |
-| **Zod** | Validar bodies de API. | Fallos 400 claros sin lógica ad-hoc. |
-| **jose** | Firmar/verificar JWT de sesión. | Auth httpOnly sin meter Passport. |
-| **bcryptjs** | Hash de password del usuario app (seed). | Estándar para credenciales propias. |
-| **Ollama** | LLM local para classify → JSON intent. | Sin SaaS obligatorio; control de datos. |
-| **Vitest** | Unit tests (heuristics, semantics, scope). | Feedback rápido del catálogo de preguntas. |
+| **Next.js 15** (App Router) | UI + API in one repo. | One deploy, clear routes, first-class TypeScript. |
+| **React 19** | Screen components. | Standard Next stack. |
+| **TypeScript** | Types for plans, DTOs, SQL builders. | Fewer errors in intents and API contracts. |
+| **Mantine 7** | Layout, forms, tables, notifications. | Fast admin/B2B UI productivity. |
+| **Recharts** | Dashboard + reusable charts (`presentation/charts`). | Declarative charts; ready for agent chart payloads later. |
+| **react-icons** | Shell and tip icons. | Lightweight and consistent. |
+| **Prisma** | ORM on `ia_ecommerce_db`. | Versioned schema, seed, typed client. |
+| **MySQL** | Product + client (two databases). | Typical ERP; product isolated from client. |
+| **Zod** | Validate API bodies. | Clear 400s without ad-hoc checks. |
+| **jose** | Sign/verify session JWT. | httpOnly auth without Passport. |
+| **bcryptjs** | Hash app-user passwords (seed). | Standard for our own credentials. |
+| **Ollama** | Local LLM: classify → intent JSON. | No mandatory SaaS; data stays local. |
+| **Vitest** | Unit tests (heuristics, semantics, scope). | Fast feedback on the question catalog. |
 
 ---
 
-## 4. Módulos de la app (resumen)
+## 4. App modules (summary)
 
 ```text
 src/
-  app/                  # Rutas Next (páginas + /api)
+  app/                  # Next routes (pages + /api)
   presentation/         # UI: agent, dashboard, charts, shell, auth, health
-  query-agent/          # Dominio + casos de uso del chat analítico
+  query-agent/          # Domain + use cases for analytics chat
     application/        # askQuestion, getDashboardStats
     domain/
       scope/            # write_blocked | out_of_scope | unmapped_read
-      semantics/        # tipos + validación de joins
+      semantics/        # types + join validation
       tables/<entity>/  # intents, heuristic, prompt, sql, format, semantics
-  client-acl/ecommerce/ # Allowlist + execute SELECT cliente
-  identity/             # (contexto login / tenant)
-  conversation/         # hilo del día
+  client-acl/ecommerce/ # Allowlist + execute client SELECT
+  identity/             # login / tenant context
+  conversation/         # day thread
   infrastructure/       # Prisma, auth, LLM, crypto
   shared/               # env, helpers
 ```
 
-| Carpeta tabla (`tables/product`, `review`, …) | Rol |
+| File in `tables/product`, `review`, … | Role |
 |---|---|
-| `intents.ts` | Nombres canónicos del catálogo. |
-| `heuristic.ts` | Frases EN → intent + filters (preferido). |
-| `prompt.ts` | Sección LLM si hace falta classify. |
-| `sql.ts` | Templates SELECT + binds. |
-| `format.ts` | Respuesta en inglés desde filas. |
-| `semantics.ts` | Métrica, grain, joins, filters (trazabilidad). |
+| `intents.ts` | Canonical catalog names. |
+| `heuristic.ts` | EN phrases → intent + filters (preferred path). |
+| `prompt.ts` | LLM section when classify needs the model. |
+| `sql.ts` | SELECT templates + bound params. |
+| `format.ts` | English answer from result rows. |
+| `semantics.ts` | Metric, grain, joins, filters (traceability). |
 
 ---
 
-## 5. Ejemplo de consulta: *"How many products are there?"*
+## 5. Example query: *"How many products are there?"*
 
-Happy path: **heuristic → `count_products`** (Ollama **no** se llama).
+Happy path: **heuristic → `count_products`** (Ollama is **not** called).
 
 ```mermaid
 sequenceDiagram
-  actor U as Usuario
+  actor U as User
   participant Chat as AgentChat.tsx
   participant API as api/agent/ask/route.ts
   participant Ask as ask-question.use-case.ts
@@ -162,58 +162,58 @@ sequenceDiagram
   Reg->>Heu: count_products
   Note over Cls: preferHeuristic → skip Ollama
   Ask->>Reg: buildEcommerceQuery
-  Reg->>Sem: valida joins
+  Reg->>Sem: validate joins
   Reg->>Sql: COUNT(*) FROM product
   Ask->>Acl: executeClientSelect
-  Acl->>DB: SELECT parametrizado
+  Acl->>DB: bound SELECT
   DB-->>Acl: rows
   Ask->>Fmt: "There are N products."
   Ask-->>Chat: matched + answer
-  Chat-->>U: muestra respuesta
+  Chat-->>U: show answer
 ```
 
-### Lista de archivos (en orden)
+### Files in order
 
-| # | Archivo | Qué hace (1 línea) |
+| # | File | One-line role |
 |---|---|---|
-| 1 | `src/app/(app)/agent/page.tsx` | Monta la pantalla del agent. |
-| 2 | `src/presentation/agent/AgentChat.tsx` | Input + Send; llama a la API. |
-| 3 | `src/middleware.ts` | Comprueba que exista cookie de sesión. |
-| 4 | `src/app/api/agent/ask/route.ts` | Valida body Zod y sesión. |
-| 5 | `src/infrastructure/auth/require-session.ts` | Verifica JWT. |
-| 6 | `src/query-agent/application/ask-question.use-case.ts` | Orquesta classify → SQL → audit. |
-| 7 | `src/query-agent/domain/scope/detect.ts` | ¿Write / fuera de catálogo / in_scope? |
-| 8 | `src/infrastructure/llm/classify-question.ts` | Heuristic primero; LLM solo si hace falta. |
-| 9 | `src/query-agent/domain/tables/index.ts` | Registry de módulos + build/format. |
-| 10 | `src/query-agent/domain/tables/product/heuristic.ts` | Detecta `count_products`. |
-| 11 | `src/query-agent/domain/tables/product/semantics.ts` | Contrato: joins `product` (+ cat si aplica). |
-| 12 | `src/query-agent/domain/semantics/validate.ts` | El SQL no toca tablas no declaradas. |
-| 13 | `src/query-agent/domain/tables/product/sql.ts` | Arma `SELECT COUNT(*) …`. |
-| 14 | `src/client-acl/ecommerce/build-query.ts` | Facade hacia el registry. |
-| 15 | `src/client-acl/ecommerce/allowlist.ts` | Solo tablas/verbos permitidos. |
-| 16 | `src/client-acl/ecommerce/execute.ts` | Corre el SELECT en la BD cliente. |
-| 17 | `src/query-agent/domain/tables/product/format.ts` | Texto final en inglés. |
-| 18 | Prisma (`ai_query_audit_log`, `message`) | Audita y guarda el turno en el chat. |
+| 1 | `src/app/(app)/agent/page.tsx` | Mounts the agent screen. |
+| 2 | `src/presentation/agent/AgentChat.tsx` | Input + Send; calls the API. |
+| 3 | `src/middleware.ts` | Checks session cookie presence. |
+| 4 | `src/app/api/agent/ask/route.ts` | Zod body + session gate. |
+| 5 | `src/infrastructure/auth/require-session.ts` | Verifies JWT. |
+| 6 | `src/query-agent/application/ask-question.use-case.ts` | Orchestrates classify → SQL → audit. |
+| 7 | `src/query-agent/domain/scope/detect.ts` | Write / out of catalog / in_scope? |
+| 8 | `src/infrastructure/llm/classify-question.ts` | Heuristic first; LLM only if needed. |
+| 9 | `src/query-agent/domain/tables/index.ts` | Module registry + build/format. |
+| 10 | `src/query-agent/domain/tables/product/heuristic.ts` | Maps to `count_products`. |
+| 11 | `src/query-agent/domain/tables/product/semantics.ts` | Contract: `product` joins (+ category if needed). |
+| 12 | `src/query-agent/domain/semantics/validate.ts` | SQL must not touch undeclared tables. |
+| 13 | `src/query-agent/domain/tables/product/sql.ts` | Builds `SELECT COUNT(*) …`. |
+| 14 | `src/client-acl/ecommerce/build-query.ts` | Facade into the registry. |
+| 15 | `src/client-acl/ecommerce/allowlist.ts` | Allowed tables/verbs only. |
+| 16 | `src/client-acl/ecommerce/execute.ts` | Runs SELECT on the client DB. |
+| 17 | `src/query-agent/domain/tables/product/format.ts` | Final English sentence. |
+| 18 | Prisma (`ai_query_audit_log`, `message`) | Audits and stores the chat turn. |
 
-**Intent:** `count_products` · **Fuente classify:** `heuristic` · **SQL:** count sobre `product`.
+**Intent:** `count_products` · **Classify source:** `heuristic` · **SQL:** count on `product`.
 
-Si la pregunta **no** está mapeada → `unmapped_read` (mensaje fijo + suggestions).  
-Si pide create/update/delete → `write_blocked` (read-only).  
-Si no es del catálogo ecommerce → `out_of_scope`.
+If the question is **related but unmapped** → `unmapped_read` (fixed message + suggestions).  
+If it asks create/update/delete → `write_blocked` (read-only).  
+If it is outside the ecommerce catalog → `out_of_scope`.
 
 ---
 
-## 6. Setup local
+## 6. Local setup
 
-1. Copiar env:
+1. Copy env:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Editar `.env`: `DB_*`, `JWT_SECRET`, URL Ollama, etc.
+2. Edit `.env`: `DB_*`, `JWT_SECRET`, Ollama URL, etc.
 
-3. Crear BD producto:
+3. Create the product database:
 
 ```sql
 CREATE DATABASE ia_ecommerce_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -226,38 +226,38 @@ npm install
 npm run db:setup
 ```
 
-Seed: empresa piloto, usuario **founder** / **founder123**, conexión a BD cliente `ecommerce`.
+Seed: pilot company, user **founder** / **founder123**, client connection to `ecommerce`.
 
-5. Arrancar:
+5. Run:
 
 ```bash
 npm run dev
 ```
 
-Abrir `http://localhost:3000/login` (Host debe coincidir con `host_key` del seed, p. ej. `localhost:3000`).  
-Ollama debe estar UP si quieres classify por LLM en preguntas sin heuristic.
+Open `http://localhost:3000/login` (browser Host must match seeded `host_key`, e.g. `localhost:3000`).  
+Ollama must be UP if you want LLM classify for questions without a heuristic match.
 
-### Scripts útiles
+### Useful scripts
 
-| Script | Uso |
+| Script | Use |
 |---|---|
-| `npm run dev` | App local |
-| `npm test` | Vitest (catálogo, semantics, scope, …) |
-| `npm run test:product-questions` | Fixture productos |
+| `npm run dev` | Local app |
+| `npm test` | Vitest (catalog, semantics, scope, …) |
+| `npm run test:product-questions` | Product question fixture |
 | `npm run db:setup` | generate + push + seed |
 
 ---
 
-## 7. Estado MVP (resumen)
+## 7. MVP status (summary)
 
-| Área | Estado |
+| Area | Status |
 |---|---|
-| Login + tenant por host | Listo |
-| Dashboard KPIs + charts | Listo |
-| Agent chat (heuristic + LLM classify + SQL seguro) | Listo |
-| Scope gate (write / out_of_scope / unmapped) | Listo |
-| Tablas: product, review, sales header/detail, customer, mixed seed | Listo |
-| Charts genéricos reutilizables | Listo (`presentation/charts`) |
-| Health probes | Listo |
-| Maintenance / writes al ERP | Fuera de alcance |
-| SAP / otros `system_type` | Pendiente (mismo patrón ACL) |
+| Login + host tenant | Done |
+| Dashboard KPIs + charts | Done |
+| Agent chat (heuristic + LLM classify + safe SQL) | Done |
+| Scope gate (write / out_of_scope / unmapped) | Done |
+| Tables: product, review, sales header/detail, customer, mixed seed | Done |
+| Reusable generic charts | Done (`presentation/charts`) |
+| Health probes | Done |
+| Maintenance / ERP writes | Out of scope |
+| SAP / other `system_type` | Pending (same ACL pattern) |
