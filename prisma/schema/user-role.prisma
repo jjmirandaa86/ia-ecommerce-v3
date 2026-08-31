@@ -1,0 +1,10 @@
+model UserRole {
+  appUserId BigInt @map("app_user_id") @db.UnsignedBigInt
+  roleId    BigInt @map("role_id") @db.UnsignedBigInt
+
+  user AppUser @relation(fields: [appUserId], references: [id])
+  role Role    @relation(fields: [roleId], references: [id])
+
+  @@id([appUserId, roleId])
+  @@map("user_role")
+}

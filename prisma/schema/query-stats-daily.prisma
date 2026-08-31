@@ -1,0 +1,22 @@
+model QueryStatsDaily {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  statsDate       DateTime @map("stats_date") @db.Date
+  clientCompanyId BigInt   @map("client_company_id") @db.UnsignedBigInt
+  appUserId       BigInt?  @map("app_user_id") @db.UnsignedBigInt
+  systemTypeId    BigInt   @map("system_type_id") @db.UnsignedBigInt
+  intentName      String?  @map("intent_name") @db.VarChar(64)
+  topic           String?  @db.VarChar(32)
+  totalQueries    Int      @default(0) @map("total_queries") @db.UnsignedInt
+  matchedCount    Int      @default(0) @map("matched_count") @db.UnsignedInt
+  noMatchCount    Int      @default(0) @map("no_match_count") @db.UnsignedInt
+  errorCount      Int      @default(0) @map("error_count") @db.UnsignedInt
+  avgDurationMs   Int?     @map("avg_duration_ms") @db.UnsignedInt
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  company    ClientCompany @relation(fields: [clientCompanyId], references: [id])
+  user       AppUser?      @relation(fields: [appUserId], references: [id])
+  systemType SystemType    @relation(fields: [systemTypeId], references: [id])
+
+  @@index([statsDate, clientCompanyId, appUserId, intentName])
+  @@map("query_stats_daily")
+}

@@ -1,0 +1,43 @@
+model AiQueryAuditLog {
+  id                   BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  appUserId            BigInt               @map("app_user_id") @db.UnsignedBigInt
+  clientCompanyId      BigInt               @map("client_company_id") @db.UnsignedBigInt
+  systemTypeId         BigInt               @map("system_type_id") @db.UnsignedBigInt
+  conversationId       BigInt?              @map("conversation_id") @db.UnsignedBigInt
+  userQuestion         String               @map("user_question") @db.Text
+  classificationStatus ClassificationStatus @map("classification_status")
+  intentName           String?              @map("intent_name") @db.VarChar(64)
+  intentJson           Json?                @map("intent_json")
+  executedSql          String?              @map("executed_sql") @db.Text
+  rowCount             Int?                 @map("row_count")
+  durationMs           Int?                 @map("duration_ms")
+  classifyMs           Int?                 @map("classify_ms")
+  llmMs                Int?                 @map("llm_ms")
+  buildMs              Int?                 @map("build_ms")
+  dbMs                 Int?                 @map("db_ms")
+  formatMs             Int?                 @map("format_ms")
+  hadChart             Boolean              @default(false) @map("had_chart")
+  errorMessage         String?              @map("error_message") @db.Text
+  reviewed             Boolean              @default(false)
+  reviewedAt           DateTime?            @map("reviewed_at") @db.DateTime(3)
+  reviewedNotes        String?              @map("reviewed_notes") @db.VarChar(500)
+  createdAt            DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+
+  user         AppUser         @relation(fields: [appUserId], references: [id])
+  company      ClientCompany   @relation(fields: [clientCompanyId], references: [id])
+  systemType   SystemType      @relation(fields: [systemTypeId], references: [id])
+  conversation Conversation?   @relation(fields: [conversationId], references: [id])
+  message      Message?
+
+  @@index([clientCompanyId, createdAt])
+  @@index([appUserId, createdAt])
+  @@index([reviewed, createdAt])
+  @@index([intentName])
+  @@map("ai_query_audit_log")
+}
+
+enum ClassificationStatus {
+  matched
+  no_match
+  error
+}

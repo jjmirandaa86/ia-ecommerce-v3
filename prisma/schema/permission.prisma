@@ -1,0 +1,10 @@
+model Permission {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  code      String   @unique @db.VarChar(64)
+  name      String   @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  rolePermissions RolePermission[]
+
+  @@map("permission")
+}

@@ -1,0 +1,15 @@
+model SystemType {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  code      String   @unique @db.VarChar(32)
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  companies          ClientCompany[]
+  suggestionExamples SuggestionExample[]
+  auditLogs          AiQueryAuditLog[]
+  queryStatsDaily    QueryStatsDaily[]
+
+  @@map("system_type")
+}
